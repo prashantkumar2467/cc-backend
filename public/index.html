@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>College System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+
+    <nav class="bg-blue-600 text-white p-4 shadow-md flex justify-between items-center hidden" id="navbar">
+        <h1 class="text-xl font-bold">College Portal</h1>
+        <button onclick="logout()" class="bg-red-500 px-4 py-1 rounded hover:bg-red-600">Logout</button>
+    </nav>
+
+    <div id="auth-section" class="flex justify-center items-center h-screen">
+        <div class="bg-white p-8 rounded-lg shadow-lg w-96">
+            <h2 class="text-2xl font-bold mb-6 text-center text-gray-700">Login</h2>
+            <div class="mb-4">
+                <label class="block text-gray-700">Username</label>
+                <input type="text" id="username" class="w-full border p-2 rounded mt-1">
+            </div>
+            <div class="mb-6">
+                <label class="block text-gray-700">Password</label>
+                <input type="password" id="password" class="w-full border p-2 rounded mt-1">
+            </div>
+            <button onclick="login()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Login</button>
+            <p class="mt-4 text-center text-sm">
+                Faculty? <a href="#" onclick="toggleAuthMode()" class="text-blue-600 underline">Register here</a>
+            </p>
+        </div>
+    </div>
+
+    <div id="admin-dashboard" class="hidden container mx-auto p-6">
+        <h2 class="text-3xl font-bold text-gray-800 mb-6">Admin Dashboard</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded shadow">
+                <h3 class="text-xl font-bold mb-4">Create Academic Structure</h3>
+                <select id="struct-type" class="w-full border p-2 mb-2 rounded">
+                    <option value="Program">Program</option>
+                    <option value="Department">Department</option>
+                    <option value="Section">Section</option>
+                    <option value="Subject">Subject</option>
+                </select>
+                <input type="text" id="struct-name" placeholder="Name (e.g., Computer Science)" class="w-full border p-2 mb-4 rounded">
+                <button onclick="createStructure()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Create</button>
+                <div id="struct-list" class="mt-4 text-sm text-gray-600"></div>
+            </div>
+
+            <div class="bg-white p-6 rounded shadow">
+                <h3 class="text-xl font-bold mb-4">Verify Pending Content</h3>
+                <div id="pending-list" class="space-y-3">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="faculty-dashboard" class="hidden container mx-auto p-6">
+        <h2 class="text-3xl font-bold text-gray-800 mb-6">Faculty Dashboard</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded shadow">
+                <h3 class="text-xl font-bold mb-4">Create Problem / Contest</h3>
+                <select id="content-type" class="w-full border p-2 mb-2 rounded">
+                    <option value="problem">Problem</option>
+                    <option value="contest">Contest</option>
+                </select>
+                <input type="text" id="content-title" placeholder="Title" class="w-full border p-2 mb-2 rounded">
+                <textarea id="content-desc" placeholder="Description" class="w-full border p-2 mb-4 rounded"></textarea>
+                <button onclick="createContent()" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Submit for Verification</button>
+            </div>
+
+            <div class="bg-white p-6 rounded shadow">
+                <h3 class="text-xl font-bold mb-4">All Verified Content</h3>
+                <div id="verified-list" class="space-y-2">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRegistering = false;
+
+        function toggleAuthMode() {
+            isRegistering = !isRegistering;
+            document.querySelector('h2').innerText = isRegistering ? 'Faculty Registration' : 'Login';
+            document.querySelector('button').innerText = isRegistering ? 'Register' : 'Login';
+            document.querySelector('p').innerHTML = isRegistering 
+                ? 'Already have account? <a href="#" onclick="toggleAuthMode()" class="text-blue-600 underline">Login here</a>' 
+                : 'Faculty? <a href="#" onclick="toggleAuthMode()" class="text-blue-600 underline">Register here</a>';
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const endpoint = isRegistering ? '/api/register' : '/api/login';
+
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            
+            const data = await res.json();
+            
+            if (res.ok) {
+                if(isRegistering) {
+                    alert('Registration Successful! Please login.');
+                    toggleAuthMode();
+                } else {
+                    loadDashboard(data.role);
+                }
+            } else {
+                alert(data.error);
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            location.reload();
+        }
+
+        function loadDashboard(role) {
+            document.getElementById('auth-section').classList.add('hidden');
+            document.getElementById('navbar').classList.remove('hidden');
+
+            if (role === 'admin') {
+                document.getElementById('admin-dashboard').classList.remove('hidden');
+                loadPendingContent();
+                loadStructure();
+            } else {
+                document.getElementById('faculty-dashboard').classList.remove('hidden');
+                loadVerifiedContent();
+            }
+        }
+
+        // --- Admin Functions ---
+        async function createStructure() {
+            const type = document.getElementById('struct-type').value;
+            const name = document.getElementById('struct-name').value;
+            await fetch('/api/academic', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, name })
+            });
+            alert('Created Successfully');
+            loadStructure();
+        }
+
+        async function loadStructure() {
+            const res = await fetch('/api/academic');
+            const data = await res.json();
+            const list = document.getElementById('struct-list');
+            list.innerHTML = data.map(i => `<p class="border-b py-1"><strong>${i.type}:</strong> ${i.name}</p>`).join('');
+        }
+
+        async function loadPendingContent() {
+            const res = await fetch('/api/content/pending');
+            const data = await res.json();
+            const list = document.getElementById('pending-list');
+            list.innerHTML = data.length ? data.map(item => `
+                <div class="border p-3 rounded bg-yellow-50 flex justify-between items-center">
+                    <div>
+                        <span class="text-xs font-bold uppercase text-gray-500">${item.type}</span>
+                        <h4 class="font-semibold">${item.title}</h4>
+                        <p class="text-sm text-gray-600">By: ${item.faculty_name}</p>
+                    </div>
+                    <button onclick="verifyContent(${item.id})" class="bg-blue-500 text-white text-sm px-3 py-1 rounded">Verify</button>
+                </div>
+            `).join('') : '<p class="text-gray-500">No pending items.</p>';
+        }
+
+        async function verifyContent(id) {
+            await fetch('/api/content/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            loadPendingContent();
+        }
+
+        // --- Faculty Functions ---
+        async function createContent() {
+            const type = document.getElementById('content-type').value;
+            const title = document.getElementById('content-title').value;
+            const description = document.getElementById('content-desc').value;
+            
+            await fetch('/api/content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, title, description })
+            });
+            alert('Submitted! Waiting for Admin verification.');
+            document.getElementById('content-title').value = '';
+            document.getElementById('content-desc').value = '';
+        }
+
+        async function loadVerifiedContent() {
+            const res = await fetch('/api/content/verified');
+            const data = await res.json();
+            const list = document.getElementById('verified-list');
+            list.innerHTML = data.map(item => `
+                <div class="border p-3 rounded bg-green-50">
+                    <span class="text-xs font-bold uppercase text-gray-500">${item.type}</span>
+                    <h4 class="font-semibold">${item.title}</h4>
+                    <p class="text-sm text-gray-700">${item.description}</p>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
